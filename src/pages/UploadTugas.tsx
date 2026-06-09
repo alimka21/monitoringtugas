@@ -150,7 +150,6 @@ export default function UploadTugas() {
         const { data: subData, error: subError } = await supabase.from('submissions')
           .insert([{
             task_id: taskId,
-            class_id: classId,
             leader_id: leaderId,
             file_name: validUrls.length > 1 ? 'Multiple Links' : validUrls[0],
             file_url: joinedUrls
