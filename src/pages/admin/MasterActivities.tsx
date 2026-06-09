@@ -172,10 +172,6 @@ export default function MasterActivities() {
         const { data: pSubs } = await supabase.from('submissions').select('id').in('leader_id', partIds);
         pSubs?.forEach((s: any) => extraSubIds.push(s.id));
       }
-      if (classIds.length > 0) {
-        const { data: cSubs } = await supabase.from('submissions').select('id').in('class_id', classIds);
-        cSubs?.forEach((s: any) => extraSubIds.push(s.id));
-      }
 
       const allUniqueSubIds = Array.from(new Set([...subIds, ...extraSubIds]));
       if (allUniqueSubIds.length > 0) {
