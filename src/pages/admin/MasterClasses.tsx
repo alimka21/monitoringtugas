@@ -98,10 +98,6 @@ export default function MasterClasses() {
       const { data: parts } = await supabase.from('participants').select('id, name').eq('class_id', id);
       const partIds = parts?.map(p => p.id) || [];
 
-      // Submissions associated with this class directly
-      const { data: classSubs } = await supabase.from('submissions').select('id').eq('class_id', id);
-      const classSubIds = classSubs?.map(s => s.id) || [];
-
       // Submissions where leader belongs to class
       let leadSubIds: string[] = [];
       if (partIds.length > 0) {
@@ -110,7 +106,7 @@ export default function MasterClasses() {
       }
 
       // Consolidate unique submission IDs that will be affected
-      const uniqueSubIds = Array.from(new Set([...classSubIds, ...leadSubIds]));
+      const uniqueSubIds = Array.from(new Set([...leadSubIds]));
       
       // Member relations in submissions where class participants are members
       let memberRelCount = 0;
