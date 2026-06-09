@@ -51,7 +51,6 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS submissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   task_id UUID REFERENCES tasks(id) ON DELETE CASCADE,
-  class_id UUID REFERENCES classes(id) ON DELETE SET NULL,
   leader_id UUID REFERENCES participants(id) ON DELETE CASCADE,
   file_url TEXT NOT NULL,
   file_name TEXT NOT NULL,
