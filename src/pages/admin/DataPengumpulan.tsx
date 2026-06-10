@@ -16,6 +16,13 @@ export default function DataPengumpulan() {
 
   const [showMemberModal, setShowMemberModal] = useState<string[] | null>(null);
   const [showLinksModal, setShowLinksModal] = useState<string[] | null>(null);
+  
+  // Edit State
+  const [editingSubId, setEditingSubId] = useState<string | null>(null);
+  const [editUrls, setEditUrls] = useState<string>('');
+
+  // Delete State
+  const [deleteConfirm, setDeleteConfirm] = useState<{id: string, leaderName: string} | null>(null);
 
   useEffect(() => {
     fetchInitial();
@@ -92,6 +99,58 @@ export default function DataPengumpulan() {
       console.error(e);
     }
     setLoading(false);
+  };
+
+  const confirmDelete = (id: string, leaderName: string) => {
+    setDeleteConfirm({ id, leaderName });
+  };
+
+  const executeDelete = async () => {
+    if (!deleteConfirm) return;
+    try {
+      const { error } = await supabase.from('submissions').delete().eq('id', deleteConfirm.id);
+      if (error) throw error;
+      setParticipantSubmissions(prev => prev.filter(s => s.id !== deleteConfirm.id));
+      setDeleteConfirm(null);
+    } catch (e: any) {
+      alert('Gagal menghapus data: ' + e.message);
+    }
+  };
+
+  const openEdit = (act: any) => {
+    setEditingSubId(act.id);
+    setEditUrls(act.fileUrls.join(', '));
+  };
+
+  const handleUpdateLink = async () => {
+    if (!editingSubId) return;
+    if (!editUrls.trim()) {
+      alert('Link tidak boleh kosong');
+      return;
+    }
+    
+    try {
+      const { error } = await supabase.from('submissions').update({
+        file_url: editUrls.trim(),
+        file_name: editUrls.split(',').length > 1 ? 'Multiple Links' : editUrls.trim()
+      }).eq('id', editingSubId);
+
+      if (error) throw error;
+      
+      const newUrls = editUrls.split(',').map(url => url.trim()).filter(url => url);
+
+      setParticipantSubmissions(prev => prev.map(s => {
+        if (s.id === editingSubId) {
+          return { ...s, fileUrls: newUrls };
+        }
+        return s;
+      }));
+      setEditingSubId(null);
+      setEditUrls('');
+      alert('Link berhasil diperbarui');
+    } catch (e: any) {
+      alert('Gagal memperbarui link: ' + e.message);
+    }
   };
 
   const exportData = () => {
@@ -213,6 +272,7 @@ export default function DataPengumpulan() {
                   <th className="px-lg py-md font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Kelas</th>
                   <th className="px-lg py-md font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Tugas</th>
                   <th className="px-lg py-md font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Link Tugas</th>
+                  <th className="px-lg py-md font-label-md text-label-md text-on-surface-variant uppercase tracking-wider text-right w-[120px]">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant bg-surface">
@@ -254,10 +314,28 @@ export default function DataPengumpulan() {
                         <span className="text-on-surface-variant italic text-sm">-</span>
                       )}
                     </td>
+                    <td className="px-lg py-4 text-right">
+                      <div className="flex items-center justify-end gap-1 flex-nowrap">
+                        <button
+                          onClick={() => openEdit(act)}
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-primary bg-primary/5 hover:bg-primary/20 transition-colors"
+                          title="Edit Link"
+                        >
+                          <span className="material-symbols-outlined text-[20px]">edit</span>
+                        </button>
+                        <button
+                          onClick={() => confirmDelete(act.id, act.leaderName)}
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-error bg-error/5 hover:bg-error/20 transition-colors"
+                          title="Hapus"
+                        >
+                           <span className="material-symbols-outlined text-[20px]">delete</span>
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={6} className="px-lg py-12 text-center text-on-surface-variant font-label-md">
+                    <td colSpan={7} className="px-lg py-12 text-center text-on-surface-variant font-label-md">
                       Belum ada pengumpulan tugas.
                     </td>
                   </tr>
@@ -271,12 +349,12 @@ export default function DataPengumpulan() {
       {/* Pop up for Members */}
       {showMemberModal !== null && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-surface rounded-2xl p-6 w-[90%] max-w-md min-w-[320px] shadow-xl">
+          <div className="bg-surface rounded-2xl p-6 w-full max-w-xl min-w-[320px] sm:min-w-[500px] shadow-xl">
             <h3 className="font-title-lg text-title-lg mb-4 text-on-surface flex items-center gap-2">
               <span className="material-symbols-outlined text-primary">groups</span>
               Daftar Anggota
             </h3>
-            <ul className="space-y-2 mb-6">
+            <ul className="space-y-2 mb-6 max-h-[60vh] overflow-y-auto pr-2">
               {showMemberModal.map((m, idx) => (
                 <li key={idx} className="bg-surface-container py-3 px-4 rounded-xl text-body-lg font-medium text-on-surface flex items-center justify-between">
                   <span>{m}</span>
@@ -296,12 +374,12 @@ export default function DataPengumpulan() {
       {/* Pop up for Links */}
       {showLinksModal !== null && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-surface rounded-2xl p-6 w-[90%] max-w-md min-w-[320px] shadow-xl">
+          <div className="bg-surface rounded-2xl p-6 w-full max-w-xl min-w-[320px] sm:min-w-[500px] shadow-xl">
             <h3 className="font-title-lg text-title-lg mb-4 text-on-surface flex items-center gap-2">
               <span className="material-symbols-outlined text-primary">link</span>
               Link Tugas
             </h3>
-            <ul className="space-y-3 mb-6">
+            <ul className="space-y-3 mb-6 max-h-[60vh] overflow-y-auto pr-2">
               {showLinksModal.map((url, idx) => (
                 <li key={idx}>
                   <a 
@@ -327,6 +405,70 @@ export default function DataPengumpulan() {
             >
               Tutup
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Pop up for Edit */}
+      {editingSubId !== null && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl p-6 w-full max-w-xl min-w-[320px] sm:min-w-[500px] shadow-xl">
+            <h3 className="font-title-lg text-title-lg mb-4 text-on-surface flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary">edit</span>
+              Edit Link Tugas
+            </h3>
+            <p className="text-sm text-on-surface-variant mb-4">
+              Masukkan link Google Drive, Dropbox, atau lainnya. Anda bisa menambahkan lebih dari satu link dipisahkan dengan koma.
+            </p>
+            <textarea 
+              value={editUrls}
+              onChange={e => setEditUrls(e.target.value)}
+              className="w-full bg-surface border border-outline-variant rounded-xl p-4 text-body-md focus:ring-2 focus:ring-primary focus:border-transparent outline-none mb-6 min-h-[100px] resize-y"
+              placeholder="https://docs.google.com/... , https://drive.google.com/..."
+            ></textarea>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => { setEditingSubId(null); setEditUrls(''); }}
+                className="flex-1 bg-outline-variant/30 text-on-surface py-2.5 rounded-xl font-medium hover:bg-outline-variant/50 transition-colors"
+              >
+                Batal
+              </button>
+              <button 
+                onClick={handleUpdateLink}
+                className="flex-1 bg-primary text-on-primary py-2.5 rounded-xl font-medium hover:bg-primary-container hover:text-on-primary-container transition-colors"
+              >
+                Simpan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pop up for Delete Confirm */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl p-6 w-full max-w-sm shadow-xl text-center">
+            <div className="w-16 h-16 bg-error/10 text-error rounded-full flex items-center justify-center mx-auto mb-4">
+               <span className="material-symbols-outlined text-[32px]">warning</span>
+            </div>
+            <h3 className="font-title-lg text-title-lg mb-2 text-on-surface">Konfirmasi Hapus</h3>
+            <p className="text-sm text-on-surface-variant mb-6">
+              Apakah Anda yakin ingin menghapus data pengumpulan oleh ketua <strong className="text-on-surface">"{deleteConfirm.leaderName}"</strong>?<br/>Aksi ini tidak dapat dibatalkan.
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 border border-outline-variant text-on-surface py-2.5 rounded-xl font-medium hover:bg-outline-variant/30 transition-colors"
+              >
+                Batal
+              </button>
+              <button 
+                onClick={executeDelete}
+                className="flex-1 bg-error text-white py-2.5 rounded-xl font-medium hover:bg-error/90 transition-colors"
+              >
+                Hapus
+              </button>
+            </div>
           </div>
         </div>
       )}
