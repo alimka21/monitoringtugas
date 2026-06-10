@@ -27,6 +27,16 @@ export default function MasterParticipants() {
     onConfirm: () => {}
   });
 
+  const [filterClass, setFilterClass] = useState('');
+  const [filterCity, setFilterCity] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterClass, filterCity, searchTerm]);
+
   // Import states
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState('');
@@ -104,6 +114,19 @@ export default function MasterParticipants() {
     setClassId('');
     setCityId('');
   };
+
+  const filteredParticipants = participants.filter(p => {
+    const matchClass = !filterClass || p.class_id === filterClass;
+    const matchCity = !filterCity || p.city_id === filterCity;
+    const matchSearch = !searchTerm || p.name.toLowerCase().includes(searchTerm.toLowerCase());
+    return matchClass && matchCity && matchSearch;
+  });
+
+  const totalPages = Math.ceil(filteredParticipants.length / ITEMS_PER_PAGE);
+  const paginatedParticipants = filteredParticipants.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -479,7 +502,7 @@ export default function MasterParticipants() {
 
       <div className="grid md:grid-cols-3 gap-lg">
         <div className="md:col-span-1" id="form-section">
-          <div className={`bg-surface-container-lowest border rounded-xl overflow-hidden shadow-[0_1px_3px_0_rgba(0,0,0,0.1)] transition-all ${editId ? 'border-amber-500 ring-2 ring-amber-500/20' : 'border-outline-variant'}`}>
+          <div className={`bg-surface-container-lowest border rounded-xl overflow-hidden shadow-[0_1px_3px_0_rgba(0,0,0,0.1)] transition-all sticky top-24 ${editId ? 'border-amber-500 ring-2 ring-amber-500/20' : 'border-outline-variant'}`}>
             <div className={`p-lg border-b bg-surface-container-low/50 flex items-center justify-between ${editId ? 'border-amber-500 bg-amber-500/5 text-amber-900' : 'border-outline-variant'}`}>
               <h3 className="font-title-lg text-title-lg font-semibold flex items-center gap-2">
                 {editId ? (
@@ -572,9 +595,49 @@ export default function MasterParticipants() {
           </div>
         </div>
         
-        <div className="md:col-span-2">
-          <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden flex flex-col h-full">
-            <div className="overflow-x-auto">
+        <div className="md:col-span-2 flex flex-col gap-4">
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+             <div className="flex-1 relative">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+                <input 
+                  type="text" 
+                  placeholder="Cari nama peserta..." 
+                  className="w-full bg-surface border border-outline-variant rounded-xl pl-10 pr-4 py-2.5 text-body-md focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                />
+             </div>
+             <div className="w-full sm:w-48 relative">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">class</span>
+                <select 
+                  className="w-full bg-surface border border-outline-variant rounded-xl pl-10 pr-4 py-2.5 text-body-md focus:ring-2 focus:ring-primary focus:border-transparent outline-none appearance-none"
+                  value={filterClass}
+                  onChange={e => setFilterClass(e.target.value)}
+                >
+                  <option value="">Semua Kelas</option>
+                  {classes.map(c => (
+                     <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+             </div>
+             <div className="w-full sm:w-48 relative">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">location_city</span>
+                <select 
+                  className="w-full bg-surface border border-outline-variant rounded-xl pl-10 pr-4 py-2.5 text-body-md focus:ring-2 focus:ring-primary focus:border-transparent outline-none appearance-none"
+                  value={filterCity}
+                  onChange={e => setFilterCity(e.target.value)}
+                >
+                  <option value="">Semua Kota</option>
+                  {cities.map(c => (
+                     <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+             </div>
+          </div>
+
+          <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden flex flex-col flex-1">
+            <div className="overflow-x-auto flex-1 h-full">
               <table className="w-full border-collapse text-left">
                 <thead>
                   <tr className="border-b border-outline-variant bg-surface-container-low/50">
@@ -585,7 +648,7 @@ export default function MasterParticipants() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant">
-                  {participants.map(p => (
+                  {paginatedParticipants.map(p => (
                     <tr key={p.id} className="hover:bg-surface-container-low/50 transition-colors group">
                       <td className="px-lg py-4">
                         <Link to={`/admin/track/participant/${p.id}`} className="flex items-center gap-3 hover:bg-surface-variant/30 p-1.5 -ml-1.5 rounded-lg transition-colors w-fit">
@@ -618,17 +681,41 @@ export default function MasterParticipants() {
                       </td>
                     </tr>
                   ))}
-                  {participants.length === 0 && (
+                  {paginatedParticipants.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-lg py-8 text-center text-slate-500">Belum ada data peserta.</td>
+                      <td colSpan={4} className="px-lg py-8 text-center text-slate-500">Belum ada data peserta sesuai filter.</td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
             
-            <div className="px-lg py-md bg-surface-container-low/30 border-t border-outline-variant mt-auto">
-              <p className="text-label-md text-on-surface-variant">Total <span className="font-bold text-on-surface">{participants.length}</span> peserta</p>
+            <div className="px-lg py-md bg-surface-container-low/30 border-t border-outline-variant mt-auto flex items-center justify-between">
+              <p className="text-label-md text-on-surface-variant">
+                Menampilkan <span className="font-bold text-on-surface">{paginatedParticipants.length}</span> dari <span className="font-bold text-on-surface">{filteredParticipants.length}</span> peserta
+              </p>
+              
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <button 
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="p-1 rounded-lg text-on-surface-variant hover:bg-surface-variant/30 disabled:opacity-30 disabled:hover:bg-transparent"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">chevron_left</span>
+                  </button>
+                  <span className="text-label-md font-medium text-on-surface px-2">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <button 
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-1 rounded-lg text-on-surface-variant hover:bg-surface-variant/30 disabled:opacity-30 disabled:hover:bg-transparent"
+                  >
+                     <span className="material-symbols-outlined text-[20px]">chevron_right</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
