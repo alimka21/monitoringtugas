@@ -7,6 +7,7 @@ export default function ParticipantDetail() {
   const [participant, setParticipant] = useState<any>(null);
   const [tasks, setTasks] = useState<any[]>([]);
   const [completedTaskIds, setCompletedTaskIds] = useState<Set<string>>(new Set());
+  const [submissionsMap, setSubmissionsMap] = useState<Map<string, any>>(new Map());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -16,17 +17,39 @@ export default function ParticipantDetail() {
   const fetchData = async () => {
     setLoading(true);
     
-    const [pRes, tRes, sRes] = await Promise.all([
+    const [pRes, tRes, sRes, leadSubsRes, memSubIdsRes] = await Promise.all([
       supabase.from('participants').select('*, classes(name), cities(name)').eq('id', id).single(),
       supabase.from('tasks').select('*').eq('is_active', true).order('created_at'),
-      supabase.from('participant_task_status').select('task_id').eq('participant_id', id)
+      supabase.from('participant_task_status').select('task_id, submission_id, completed_at').eq('participant_id', id),
+      supabase.from('submissions').select('*, leader:participants(name), submission_members(participant:participants(name))').eq('leader_id', id),
+      supabase.from('submission_members').select('submission_id').eq('participant_id', id)
     ]);
+
+    let allSubs: any[] = leadSubsRes.data || [];
+    
+    if (memSubIdsRes.data && memSubIdsRes.data.length > 0) {
+      const subIds = memSubIdsRes.data.map(m => m.submission_id);
+      const memSubsRes = await supabase.from('submissions').select('*, leader:participants(name), submission_members(participant:participants(name))').in('id', subIds);
+      if (memSubsRes.data) {
+        allSubs = [...allSubs, ...memSubsRes.data];
+      }
+    }
 
     if (pRes.data) setParticipant(pRes.data);
     if (tRes.data) setTasks(tRes.data);
     if (sRes.data) {
       setCompletedTaskIds(new Set(sRes.data.map(s => s.task_id)));
     }
+    
+    // Store submissions mapped by task_id for easy lookup
+    const subsMap = new Map();
+    allSubs.forEach(sub => {
+      if (!subsMap.has(sub.task_id)) {
+        subsMap.set(sub.task_id, sub);
+      }
+    });
+    
+    setSubmissionsMap(subsMap);
     
     setLoading(false);
   };
@@ -138,12 +161,76 @@ export default function ParticipantDetail() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
             {tasks.map(task => {
               const isCompleted = completedTaskIds.has(task.id);
+              const subDetails = submissionsMap.get(task.id);
               
-              if (isCompleted) {
+              if (isCompleted && subDetails) {
+                const isLeader = subDetails.leader_id === id;
+                const roleBadge = isLeader 
+                  ? <span className="px-2 py-0.5 bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold uppercase rounded-md tracking-wider">Ketua</span>
+                  : <span className="px-2 py-0.5 bg-secondary/10 text-secondary border border-secondary/20 text-[10px] font-bold uppercase rounded-md tracking-wider">Anggota</span>;
+
+                const fileLinks = subDetails.file_url ? subDetails.file_url.split(', ') : [];
+                
                 return (
-                  <div key={task.id} className="bg-surface-container-lowest shadow-[0_1px_3px_0_rgba(0,0,0,0.1)] border border-outline-variant/50 rounded-xl p-lg flex flex-col gap-md group hover:border-primary/30 transition-all cursor-pointer">
+                  <div key={task.id} className="bg-surface-container-lowest shadow-[0_1px_3px_0_rgba(0,0,0,0.1)] border border-outline-variant/50 rounded-xl p-lg flex flex-col gap-md group hover:border-primary/30 transition-all">
                     <div className="flex items-start justify-between">
-                      <div className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase rounded-full tracking-wider">SELESAI</div>
+                      <div className="flex items-center gap-2">
+                        <div className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase rounded-full tracking-wider">SELESAI</div>
+                        {task.type === 'kelompok' && roleBadge}
+                      </div>
+                      <span className="material-symbols-outlined text-emerald-500" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                    </div>
+                    <div>
+                      <h4 className="font-body-lg font-bold text-on-surface group-hover:text-primary transition-colors">{task.title}</h4>
+                      {task.description && <p className="text-label-md text-on-surface-variant mt-1 line-clamp-2">{task.description}</p>}
+                    </div>
+                    
+                    <div className="mt-2 pt-3 border-t border-outline-variant/30 flex flex-col gap-3">
+                      <div className="flex flex-col gap-1 text-sm">
+                        <span className="text-on-surface-variant text-[11px] font-medium uppercase tracking-wider">Waktu Submit</span>
+                        <span className="text-on-surface">{new Date(subDetails.uploaded_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                      </div>
+                      
+                      {task.type === 'kelompok' && (
+                        <div className="flex flex-col gap-1 text-sm bg-surface-container/30 p-2 rounded-lg">
+                           <span className="text-on-surface-variant text-[11px] font-medium uppercase tracking-wider">Tim Pengumpul</span>
+                           <span className="text-on-surface font-medium text-xs">
+                             {subDetails.leader?.name} (Ketua)
+                           </span>
+                           {subDetails.submission_members?.length > 0 && (
+                             <span className="text-on-surface-variant text-xs mt-0.5">
+                               Anggota: {subDetails.submission_members.map((m: any) => m.participant?.name).join(', ')}
+                             </span>
+                           )}
+                        </div>
+                      )}
+
+                      <div className="flex flex-col gap-1.5 mt-1">
+                        <span className="text-on-surface-variant text-[11px] font-medium uppercase tracking-wider">Lampiran File</span>
+                        <div className="flex flex-wrap gap-2">
+                           {fileLinks.map((url: string, i: number) => (
+                             <a 
+                               key={i} 
+                               href={url} 
+                               target="_blank" 
+                               rel="noopener noreferrer"
+                               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface text-primary text-xs font-medium border border-outline-variant hover:border-primary/50 hover:bg-primary/5 rounded-lg transition-colors"
+                               onClick={(e) => e.stopPropagation()}
+                             >
+                                <span className="material-symbols-outlined text-[14px]">link</span>
+                                Link {i + 1}
+                             </a>
+                           ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              } else if (isCompleted && !subDetails) {
+                 return (
+                  <div key={task.id} className="bg-surface-container-lowest shadow-[0_1px_3px_0_rgba(0,0,0,0.1)] border border-outline-variant/50 rounded-xl p-lg flex flex-col gap-md group hover:border-primary/30 transition-all">
+                    <div className="flex items-start justify-between">
+                      <div className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase rounded-full tracking-wider">SELESAI (Legacy)</div>
                       <span className="material-symbols-outlined text-emerald-500" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
                     </div>
                     <div>
@@ -151,7 +238,7 @@ export default function ParticipantDetail() {
                       {task.description && <p className="text-label-md text-on-surface-variant mt-1 line-clamp-2">{task.description}</p>}
                     </div>
                   </div>
-                );
+                 );
               } else {
                 return (
                    <div key={task.id} className="bg-surface-container-lowest shadow-[0_1px_3px_0_rgba(0,0,0,0.1)] border-l-4 border-l-error border-y-[1px] border-y-outline-variant/50 border-r-[1px] border-r-outline-variant/50 rounded-xl p-lg flex flex-col gap-md group hover:border-error/30 transition-all cursor-pointer">
@@ -173,16 +260,6 @@ export default function ParticipantDetail() {
             )}
           </div>
         </section>
-
-        <aside className="flex flex-col gap-lg">
-          <h3 className="font-title-lg text-title-lg text-on-surface flex items-center gap-2">
-            <span className="material-symbols-outlined">history</span>
-            Activity Details (Coming Soon)
-          </h3>
-          <div className="bg-surface-container-lowest shadow-[0_1px_3px_0_rgba(0,0,0,0.1)] border border-outline-variant/50 rounded-xl p-lg text-center text-on-surface-variant">
-             Log audit aktivitas untuk submission spesifik peserta akan tampil di sini.
-          </div>
-        </aside>
       </div>
     </div>
   );
