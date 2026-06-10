@@ -446,25 +446,30 @@ export default function DataPengumpulan() {
 
       {/* Pop up for Delete Confirm */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-surface rounded-2xl p-6 w-full max-w-sm shadow-xl text-center">
-            <div className="w-16 h-16 bg-error/10 text-error rounded-full flex items-center justify-center mx-auto mb-4">
-               <span className="material-symbols-outlined text-[32px]">warning</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-surface border border-outline-variant rounded-xl shadow-2xl w-[90vw] md:w-[450px] flex flex-col overflow-hidden">
+            <div className="p-lg border-b border-outline-variant bg-surface-container-low/50 flex items-center gap-3 text-error">
+              <span className="material-symbols-outlined text-4xl">warning</span>
+              <h3 className="font-headline-sm text-headline-sm font-semibold text-on-surface">
+                Konfirmasi Hapus
+              </h3>
             </div>
-            <h3 className="font-title-lg text-title-lg mb-2 text-on-surface">Konfirmasi Hapus</h3>
-            <p className="text-sm text-on-surface-variant mb-6">
-              Apakah Anda yakin ingin menghapus data pengumpulan oleh ketua <strong className="text-on-surface">"{deleteConfirm.leaderName}"</strong>?<br/>Aksi ini tidak dapat dibatalkan.
-            </p>
-            <div className="flex gap-3">
+            <div className="p-lg space-y-md">
+              <p className="text-body-md text-on-surface whitespace-pre-wrap leading-relaxed">
+                Apakah Anda yakin ingin menghapus data pengumpulan oleh ketua <strong className="text-on-surface font-semibold">"{deleteConfirm.leaderName}"</strong>?
+                <br/><br/>Tindakan ini tidak bisa dibatalkan.
+              </p>
+            </div>
+            <div className="p-sm px-lg border-t border-outline-variant bg-surface-container-low flex justify-end gap-3">
               <button 
                 onClick={() => setDeleteConfirm(null)}
-                className="flex-1 border border-outline-variant text-on-surface py-2.5 rounded-xl font-medium hover:bg-outline-variant/30 transition-colors"
+                className="px-6 py-2.5 rounded-xl font-label-md text-label-md font-semibold text-on-surface-variant hover:bg-surface-variant/50 transition-colors"
               >
                 Batal
               </button>
               <button 
                 onClick={executeDelete}
-                className="flex-1 bg-error text-white py-2.5 rounded-xl font-medium hover:bg-error/90 transition-colors"
+                className="px-6 py-2.5 rounded-xl font-label-md text-label-md font-semibold bg-error text-white hover:bg-error/90 transition-colors flex items-center gap-2"
               >
                 Hapus
               </button>
