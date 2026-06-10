@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS submissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   task_id UUID REFERENCES tasks(id) ON DELETE CASCADE,
+  class_id UUID REFERENCES classes(id) ON DELETE SET NULL,
   leader_id UUID REFERENCES participants(id) ON DELETE CASCADE,
   file_url TEXT NOT NULL,
   file_name TEXT NOT NULL,
@@ -121,6 +122,15 @@ CREATE POLICY "Admin full access tasks" ON tasks FOR ALL USING (auth.role() = 'a
 CREATE POLICY "Admin full access submissions" ON submissions FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "Admin full access submission members" ON submission_members FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "Admin full access participant task status" ON participant_task_status FOR ALL USING (auth.role() = 'authenticated');
+
+-- Fix missing cascade constraints if tables already exist
+ALTER TABLE participant_task_status
+DROP CONSTRAINT IF EXISTS participant_task_status_submission_id_fkey,
+ADD CONSTRAINT participant_task_status_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES submissions(id) ON DELETE CASCADE;
+
+ALTER TABLE submission_members
+DROP CONSTRAINT IF EXISTS submission_members_submission_id_fkey,
+ADD CONSTRAINT submission_members_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES submissions(id) ON DELETE CASCADE;
 
 -- Storage bucket
 insert into storage.buckets (id, name, public) values ('task-files', 'task-files', true) on conflict (id) do nothing;
