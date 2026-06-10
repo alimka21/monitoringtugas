@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 
 export default function MasterParticipants() {
@@ -586,15 +587,15 @@ export default function MasterParticipants() {
                   {participants.map(p => (
                     <tr key={p.id} className="hover:bg-surface-container-low/50 transition-colors group">
                       <td className="px-lg py-4">
-                        <div className="flex items-center gap-3">
+                        <Link to={`/admin/track/participant/${p.id}`} className="flex items-center gap-3 hover:bg-surface-variant/30 p-1.5 -ml-1.5 rounded-lg transition-colors w-fit">
                           <div className="w-9 h-9 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed font-bold text-label-md shrink-0">
                             {p.name.substring(0,2).toUpperCase()}
                           </div>
                           <div>
-                            <p className="font-body-md text-body-md font-semibold text-on-surface">{p.name}</p>
+                            <p className="font-body-md text-body-md font-semibold text-primary group-hover:underline">{p.name}</p>
                             <p className="text-label-md text-on-surface-variant">WA: {p.participant_number || '-'}</p>
                           </div>
-                        </div>
+                        </Link>
                       </td>
                       <td className="px-lg py-4 font-body-md text-body-md">{p.classes?.name}</td>
                       <td className="px-lg py-4 font-body-md text-body-md text-on-surface-variant">{p.cities?.name || '-'}</td>
