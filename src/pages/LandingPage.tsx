@@ -48,13 +48,11 @@ export default function LandingPage() {
   const fetchDashboardData = async (actId: string, clsId: string) => {
     setLoading(true);
     try {
-      // Get all tasks for this activity to calculate total
       const { data: tData } = await supabase.from('tasks').select('id', { count: 'exact' }).eq('activity_id', actId).eq('is_active', true);
       const tCount = tData?.length || 0;
       setTasksCount(tCount);
 
-      // Get participants, optionally filtered by class
-      let pQuery = supabase.from('participants').select('*, classes(name)');
+      let pQuery = supabase.from('participants').select('*, classes(name), cities(name)');
       if (clsId) {
         pQuery = pQuery.eq('class_id', clsId);
       }
@@ -62,7 +60,6 @@ export default function LandingPage() {
       let pData = pDataRaw || [];
       
       if (!clsId) {
-        // If "Semua Kelas", filter in JS to be safe
         const { data: actClasses } = await supabase.from('classes').select('id').eq('activity_id', actId);
         const actClassIds = actClasses?.map(c => c.id) || [];
         pData = pData.filter((p: any) => actClassIds.includes(p.class_id));
@@ -71,7 +68,6 @@ export default function LandingPage() {
       const { data: sData } = await supabase.from('participant_task_status').select('participant_id, task_id');
 
       if (pData && sData) {
-        // Filter status to only include tasks from the selected activity
         const taskIds = tData?.map(t => t.id) || [];
         const filteredSData = sData.filter(s => taskIds.includes(s.task_id));
 
@@ -131,7 +127,6 @@ export default function LandingPage() {
               <div className="bg-white/70 backdrop-blur-md border border-outline-variant/50 rounded-xl p-md shadow-2xl relative z-10 overflow-hidden">
                 <img alt="Dashboard Preview" className="rounded-lg w-full h-auto object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBVKyGcZNXfqvv36PBws2UVGXzRsZgY8pXk8qwUix4Y0D5R22iYcW-cXN2r8iBnMvLdpbotbXroagECdy-OfCd3ws8d5Z-vfAKgAKN3Nzi3EKRvmQe5rBVwr_8oHrIYVmft1Zj4qI0asOtWIkUya6QOtAEBeORir7s6DaP_LpVz63bbEBhVxn91lvZseMEkUeZqWh2abXODklRRbzYqk2AwFnsZb6m6uokDvDrGQH6RgKliYf2kJBQp0_XmUhvYklezVLmbBeVCjzat"/>
               </div>
-              {/* Decorative Elements */}
               <div className="absolute -top-12 -right-12 w-64 h-64 bg-primary-container rounded-full blur-3xl opacity-20 -z-10"></div>
               <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-secondary rounded-full blur-3xl opacity-10 -z-10"></div>
             </div>
@@ -201,7 +196,7 @@ export default function LandingPage() {
                       <tr key={p.id} className="hover:bg-surface-container-low transition-colors">
                         <td className="px-lg py-4">
                           <div className="font-body-md text-body-md font-semibold text-on-surface">{p.name}</div>
-                          <div className="text-xs text-on-surface-variant mt-1">{p.number || '-'}</div>
+                          <div className="text-xs text-on-surface-variant mt-1">{p.cities?.name || '-'}</div>
                         </td>
                         <td className="px-lg py-4 font-body-md text-body-md">{p.classes?.name}</td>
                         <td className="px-lg py-4 font-body-md text-body-md text-center">
