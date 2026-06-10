@@ -65,12 +65,10 @@ export default function UploadTugas() {
 
   const fetchParticipants = async (cId: string) => {
     const { data } = await supabase.from('participants').select('*').eq('class_id', cId).order('name');
-    if (data && data.length > 0) {
+    if (data) {
       setParticipants(data);
     } else {
-      setParticipants([
-        { id: 'dummy-1', name: 'Dummy Peserta 1' },
-      ]);
+      setParticipants([]);
     }
     setLeaderId('');
     setMemberIds([]);
@@ -142,55 +140,51 @@ export default function UploadTugas() {
     setLoading(true);
 
     try {
-      const isDummy = leaderId.startsWith('dummy-');
       const joinedUrls = validUrls.join(', ');
 
-      if (!isDummy) {
-        // 2. Insert Submission
-        const { data: subData, error: subError } = await supabase.from('submissions')
-          .insert([{
-            task_id: taskId,
-            leader_id: leaderId,
-            file_name: validUrls.length > 1 ? 'Multiple Links' : validUrls[0],
-            file_url: joinedUrls
-          }])
-          .select()
-          .single();
-
-        if (subError) throw subError;
-        
-        console.log("subData:", subData);
-        if (!subData) {
-           throw new Error("Gagal mendapatkan ID pengumpulan dari database (mock supabase).");
-        }
-
-        // 3. Insert Members
-        const cleanMembers = memberIds.filter(m => m.trim() !== '');
-        const allMembers = [leaderId, ...cleanMembers];
-        const memberInserts = cleanMembers.map(mId => ({
-          submission_id: subData.id,
-          participant_id: mId
-        }));
-
-        if (memberInserts.length > 0) {
-          const { error: memError } = await supabase.from('submission_members').insert(memberInserts);
-          if (memError) console.error("Error inserting members:", memError);
-        }
-
-        // 4. Update Progress
-        const statusInserts = allMembers.map(pId => ({
-          participant_id: pId,
+      // 2. Insert Submission
+      const { data: subData, error: subError } = await supabase.from('submissions')
+        .insert([{
           task_id: taskId,
-          submission_id: subData.id
-        }));
+          class_id: classId,
+          leader_id: leaderId,
+          file_name: validUrls.length > 1 ? 'Multiple Links' : validUrls[0],
+          file_url: joinedUrls
+        }])
+        .select()
+        .single();
 
-        const { error: statusError } = await supabase.from('participant_task_status').upsert(statusInserts, { onConflict: 'participant_id,task_id' });
-        
-        if (statusError) throw statusError;
-        setSubmissionId(subData.id);
-      } else {
-        setSubmissionId('dummy-' + Date.now());
+      if (subError) throw subError;
+      
+      console.log("subData:", subData);
+      if (!subData) {
+         throw new Error("Gagal mendapatkan ID pengumpulan dari database.");
       }
+
+      // 3. Insert Members
+      const cleanMembers = memberIds.filter(m => m.trim() !== '');
+      const allMembers = [leaderId, ...cleanMembers];
+      const memberInserts = cleanMembers.map(mId => ({
+        submission_id: subData.id,
+        participant_id: mId
+      }));
+
+      if (memberInserts.length > 0) {
+        const { error: memError } = await supabase.from('submission_members').insert(memberInserts);
+        if (memError) console.error("Error inserting members:", memError);
+      }
+
+      // 4. Update Progress
+      const statusInserts = allMembers.map(pId => ({
+        participant_id: pId,
+        task_id: taskId,
+        submission_id: subData.id
+      }));
+
+      const { error: statusError } = await supabase.from('participant_task_status').upsert(statusInserts, { onConflict: 'participant_id,task_id' });
+      
+      if (statusError) throw statusError;
+      setSubmissionId(subData.id);
 
       setSuccess(true);
       
