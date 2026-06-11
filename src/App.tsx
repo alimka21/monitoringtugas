@@ -5,8 +5,6 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { SetupInstructions } from '@/components/SetupInstructions';
 import { PublicLayout, AdminLayout } from '@/components/Layout';
 
-// Trigger update for GitHub
-
 // Placeholder Pages
 import LandingPage from '@/pages/LandingPage';
 import Login from '@/pages/Login';

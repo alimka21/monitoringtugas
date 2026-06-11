@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Link } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 
 export default function TrackTugas() {
   const [participants, setParticipants] = useState<any[]>([]);
   const [tasksCount, setTasksCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -22,15 +24,39 @@ export default function TrackTugas() {
       const { data: pData } = await supabase.from('participants').select('*, classes(name), cities(name)');
       
       const { data: sData } = await supabase.from('participant_task_status').select('participant_id, task_id');
+      
+      // We also should count submissions for "finished" logic to match what ParticipantDetail does
+      const { data: subsData } = await supabase.from('submissions').select('id, leader_id, task_id');
+      const { data: subMemsData } = await supabase.from('submission_members').select('participant_id, submission_id');
 
-      if (pData && sData) {
-        const counts: Record<string, number> = {};
-        sData.forEach(s => {
-          counts[s.participant_id] = (counts[s.participant_id] || 0) + 1;
+      if (pData) {
+        const counts: Record<string, Set<string>> = {};
+        
+        // initialize sets
+        pData.forEach(p => counts[p.id] = new Set());
+
+        // from status
+        sData?.forEach(s => {
+          if (counts[s.participant_id]) counts[s.participant_id].add(s.task_id);
+        });
+
+        // from leader submissions
+        const subMap = new Map();
+        subsData?.forEach(sub => {
+          subMap.set(sub.id, sub.task_id);
+          if (counts[sub.leader_id]) counts[sub.leader_id].add(sub.task_id);
+        });
+
+        // from member submissions
+        subMemsData?.forEach(sm => {
+          const tId = subMap.get(sm.submission_id);
+          if (tId && counts[sm.participant_id]) {
+            counts[sm.participant_id].add(tId);
+          }
         });
 
         const merged = pData.map(p => {
-          const finished = counts[p.id] || 0;
+          const finished = counts[p.id].size;
           return {
             ...p,
             finished,
@@ -47,6 +73,84 @@ export default function TrackTugas() {
     setLoading(false);
   };
 
+  const handleExportAll = async () => {
+    setExporting(true);
+    try {
+      const { data: tasks } = await supabase.from('tasks').select('*').eq('is_active', true).order('created_at');
+      const { data: parts } = await supabase.from('participants').select('*, classes(name), cities(name)').order('name');
+      const { data: submissions } = await supabase.from('submissions').select('*');
+      const { data: submissionMembers } = await supabase.from('submission_members').select('*');
+
+      if (!tasks || !parts) {
+        alert("Gagal mengambil data untuk export");
+        return;
+      }
+
+      const subMap = new Map();
+      submissions?.forEach(sub => subMap.set(sub.id, sub));
+
+      const pTaskLinks = new Map();
+
+      submissions?.forEach(sub => {
+        const pId = sub.leader_id;
+        const tId = sub.task_id;
+        if (!pTaskLinks.has(pId)) pTaskLinks.set(pId, {});
+        pTaskLinks.get(pId)[tId] = sub.file_url;
+      });
+
+      submissionMembers?.forEach(sm => {
+        const pId = sm.participant_id;
+        const sub = subMap.get(sm.submission_id);
+        if (sub) {
+            const tId = sub.task_id;
+            if (!pTaskLinks.has(pId)) pTaskLinks.set(pId, {});
+            pTaskLinks.get(pId)[tId] = sub.file_url;
+        }
+      });
+
+      const headers = ["Nama Peserta", "Kelas", "Kab/Kota"];
+      tasks.forEach(t => headers.push(`Tugas: ${t.title}`));
+      
+      const wsData = [headers];
+
+      parts.forEach(p => {
+        const row = [
+          p.name,
+          p.classes?.name || '-',
+          p.cities?.name || '-'
+        ];
+
+        const pLinks = pTaskLinks.get(p.id) || {};
+        
+        tasks.forEach(t => {
+          row.push(pLinks[t.id] || "Belum");
+        });
+
+        wsData.push(row);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      
+      // Auto-size columns to be wider
+      const wscols = [
+        { wch: 30 }, // Nama 
+        { wch: 25 }, // Kelas
+        { wch: 20 }, // Kota
+      ];
+      tasks.forEach(() => wscols.push({ wch: 40 })); // Task URLs
+      ws['!cols'] = wscols;
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Rekap Pengumpulan Lengkap");
+      XLSX.writeFile(wb, "Rekap_Monitoring_Peserta_Dan_Tugas.xlsx");
+
+    } catch (err: any) {
+      alert("Error exporting: " + err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const filtered = participants.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.classes?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -55,12 +159,29 @@ export default function TrackTugas() {
 
   return (
     <div className="space-y-lg">
-      <div className="mb-xl">
-        <h3 className="font-headline-md text-headline-md text-on-surface mb-xs">Monitoring Peserta</h3>
-        <p className="text-body-md text-on-surface-variant">Real-time academic progress and assignment tracking across all regions. Total {tasksCount} tugas aktif.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-xl">
+        <div>
+          <h3 className="font-headline-md text-headline-md text-on-surface mb-xs">Monitoring Peserta</h3>
+          <p className="text-body-md text-on-surface-variant">Real-time academic progress and assignment tracking across all regions. Total {tasksCount} tugas aktif.</p>
+        </div>
+        <div>
+          <button 
+            onClick={handleExportAll}
+            disabled={exporting}
+            className="flex items-center gap-2 bg-primary text-on-primary px-6 py-3 rounded-xl font-medium hover:opacity-90 transition-opacity disabled:opacity-50 shadow-sm"
+          >
+            {exporting ? (
+              <span className="material-symbols-outlined animate-spin">progress_activity</span>
+            ) : (
+              <span className="material-symbols-outlined text-[20px]">download</span>
+            )}
+            {exporting ? 'Mengekspor...' : 'Export Data Lengkap'}
+          </button>
+        </div>
       </div>
 
       <section className="bg-surface border border-outline-variant rounded-2xl p-lg mb-lg shadow-[0_1px_3px_0_rgba(0,0,0,0.05),0_1px_2px_0_rgba(0,0,0,0.03)] flex flex-wrap gap-4 items-end">
+
         <div className="flex-1 min-w-[240px]">
           <label className="font-label-md text-label-md text-on-surface-variant mb-2 block">Search Participant</label>
           <div className="relative">

@@ -22,6 +22,10 @@ export default function UploadTugas() {
   const [error, setError] = useState('');
   const [submissionId, setSubmissionId] = useState('');
 
+  const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
+  const [existingSubmissionId, setExistingSubmissionId] = useState<string | null>(null);
+  const [pendingSubmissionData, setPendingSubmissionData] = useState<{validUrls: string[], joinedUrls: string} | null>(null);
+
   useEffect(() => {
     fetchInitialData();
   }, []);
@@ -141,6 +145,42 @@ export default function UploadTugas() {
 
     try {
       const joinedUrls = validUrls.join(', ');
+      
+      const { data: existingSub, error: exErr } = await supabase.from('submissions')
+        .select('id')
+        .eq('task_id', taskId)
+        .eq('leader_id', leaderId)
+        .maybeSingle();
+        
+      if (existingSub) {
+        setExistingSubmissionId(existingSub.id);
+        setPendingSubmissionData({ validUrls, joinedUrls });
+        setShowOverwriteConfirm(true);
+        setLoading(false);
+        return;
+      }
+      
+      await executeSubmit(validUrls, joinedUrls, null);
+
+    } catch (err: any) {
+      setError(err.message || 'Terjadi kesalahan saat memeriksa data.');
+      console.error(err);
+      setLoading(false);
+    }
+  };
+
+  const executeSubmit = async (validUrls: string[], joinedUrls: string, oldSubId: string | null) => {
+    setLoading(true);
+    setShowOverwriteConfirm(false);
+    setError('');
+
+    try {
+      if (oldSubId) {
+        const { error: delErr } = await supabase.from('submissions').delete().eq('id', oldSubId);
+        if (delErr) {
+          throw new Error('Gagal menghapus submission lama: ' + delErr.message);
+        }
+      }
 
       // 2. Insert Submission
       const { data: subData, error: subError } = await supabase.from('submissions')
@@ -156,7 +196,6 @@ export default function UploadTugas() {
 
       if (subError) throw subError;
       
-      console.log("subData:", subData);
       if (!subData) {
          throw new Error("Gagal mendapatkan ID pengumpulan dari database.");
       }
@@ -193,6 +232,8 @@ export default function UploadTugas() {
       setLeaderId('');
       setMemberIds([]);
       setFileUrls(['']);
+      setExistingSubmissionId(null);
+      setPendingSubmissionData(null);
       
     } catch (err: any) {
       setError(err.message || 'Terjadi kesalahan saat menyimpan data.');
@@ -447,6 +488,47 @@ export default function UploadTugas() {
           </div>
         </div>
       </div>
+
+      {/* Pop up for Overwrite Confirm */}
+      {showOverwriteConfirm && pendingSubmissionData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-surface border border-outline-variant rounded-xl shadow-2xl w-[90vw] md:w-[450px] flex flex-col overflow-hidden">
+            <div className="p-lg border-b border-outline-variant bg-surface-container-low/50 flex items-center gap-3 text-amber-600">
+              <span className="material-symbols-outlined text-4xl">warning</span>
+              <h3 className="font-headline-sm text-headline-sm font-semibold text-on-surface">
+                Tugas Sudah Pernah Dikirim
+              </h3>
+            </div>
+            <div className="p-lg space-y-md">
+              <p className="text-body-md text-on-surface whitespace-pre-wrap leading-relaxed">
+                Anda sebelumnya sudah mengumpulkan tugas untuk materi ini. 
+                <br/><br/>
+                Apakah Anda ingin <strong className="text-on-surface font-semibold">menimpa (menghapus yang lama)</strong> dan menggantinya dengan kiriman yang baru ini?
+              </p>
+            </div>
+            <div className="p-sm px-lg border-t border-outline-variant bg-surface-container-low flex justify-end gap-3">
+              <button 
+                onClick={() => {
+                  setShowOverwriteConfirm(false);
+                  setExistingSubmissionId(null);
+                  setPendingSubmissionData(null);
+                }}
+                className="px-6 py-2.5 rounded-xl font-label-md text-label-md font-semibold text-on-surface-variant hover:bg-surface-variant/50 transition-colors"
+                disabled={loading}
+              >
+                Batal
+              </button>
+              <button 
+                onClick={() => executeSubmit(pendingSubmissionData.validUrls, pendingSubmissionData.joinedUrls, existingSubmissionId)}
+                className="px-6 py-2.5 rounded-xl font-label-md text-label-md font-semibold bg-primary text-white hover:bg-primary/90 transition-colors flex items-center gap-2"
+                disabled={loading}
+              >
+                {loading ? 'Menyimpan...' : 'Ya, Timpa Data Lama'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -48,7 +48,7 @@ export default function LandingPage() {
   const fetchDashboardData = async (actId: string, clsId: string) => {
     setLoading(true);
     try {
-      const { data: tData } = await supabase.from('tasks').select('id', { count: 'exact' }).eq('activity_id', actId).eq('is_active', true);
+      const { data: tData } = await supabase.from('tasks').select('id').eq('activity_id', actId).eq('is_active', true);
       const tCount = tData?.length || 0;
       setTasksCount(tCount);
 
@@ -65,27 +65,73 @@ export default function LandingPage() {
         pData = pData.filter((p: any) => actClassIds.includes(p.class_id));
       }
       
-      const { data: sData } = await supabase.from('participant_task_status').select('participant_id, task_id');
+      const { data: sData } = await supabase.from('participant_task_status').select('*');
+      const { data: subsData } = await supabase.from('submissions').select('*');
+      const { data: subMemsData } = await supabase.from('submission_members').select('*');
 
-      if (pData && sData) {
-        const taskIds = tData?.map(t => t.id) || [];
-        const filteredSData = sData.filter(s => taskIds.includes(s.task_id));
+      if (pData) {
+        const counts: Record<string, Set<string>> = {};
+        const latestTime: Record<string, number> = {};
+        
+        // initialize sets
+        pData.forEach(p => counts[p.id] = new Set());
 
-        const counts: Record<string, number> = {};
-        filteredSData.forEach(s => {
-          counts[s.participant_id] = (counts[s.participant_id] || 0) + 1;
+        const updateLatestTime = (pId: string, timeStr: string | null) => {
+          if (!timeStr) return;
+          const time = new Date(timeStr).getTime();
+          if (!latestTime[pId] || time > latestTime[pId]) {
+            latestTime[pId] = time;
+          }
+        };
+
+        // from status
+        const taskIds = new Set(tData?.map(t => t.id) || []);
+        
+        sData?.forEach(s => {
+          if (counts[s.participant_id] && taskIds.has(s.task_id)) {
+             counts[s.participant_id].add(s.task_id);
+             updateLatestTime(s.participant_id, s.completed_at || s.submitted_at || s.created_at);
+          }
+        });
+
+        // from leader submissions
+        const subMap = new Map();
+        subsData?.forEach(sub => {
+          subMap.set(sub.id, sub);
+          if (counts[sub.leader_id] && taskIds.has(sub.task_id)) {
+             counts[sub.leader_id].add(sub.task_id);
+             updateLatestTime(sub.leader_id, sub.created_at || sub.uploaded_at || sub.submitted_at);
+          }
+        });
+
+        // from member submissions
+        subMemsData?.forEach(sm => {
+          const sub = subMap.get(sm.submission_id);
+          if (sub && counts[sm.participant_id] && taskIds.has(sub.task_id)) {
+            counts[sm.participant_id].add(sub.task_id);
+            updateLatestTime(sm.participant_id, sub.created_at || sub.uploaded_at || sub.submitted_at);
+          }
         });
 
         const merged = pData.map(p => {
-          const finished = counts[p.id] || 0;
+          const finished = counts[p.id] ? counts[p.id].size : 0;
           return {
             ...p,
             finished,
-            progress: tCount > 0 ? Math.round((finished / tCount) * 100) : 0
+            progress: tCount > 0 ? Math.min(100, Math.round((finished / tCount) * 100)) : 0,
+            completionTime: latestTime[p.id] || Infinity
           };
         });
         
-        merged.sort((a, b) => b.progress - a.progress);
+        merged.sort((a, b) => {
+          if (b.progress !== a.progress) {
+             return b.progress - a.progress;
+          }
+          if (a.completionTime !== b.completionTime) {
+            return a.completionTime - b.completionTime;
+          }
+          return 0; // remain same
+        });
         setParticipants(merged);
       }
     } catch (e) {

@@ -20,7 +20,7 @@ export default function ParticipantDetail() {
     const [pRes, tRes, sRes, leadSubsRes, memSubIdsRes] = await Promise.all([
       supabase.from('participants').select('*, classes(name), cities(name)').eq('id', id).single(),
       supabase.from('tasks').select('*').eq('is_active', true).order('created_at'),
-      supabase.from('participant_task_status').select('task_id, submission_id, completed_at').eq('participant_id', id),
+      supabase.from('participant_task_status').select('*').eq('participant_id', id),
       supabase.from('submissions').select('*, leader:participants(name), submission_members(participant:participants(name))').eq('leader_id', id),
       supabase.from('submission_members').select('submission_id').eq('participant_id', id)
     ]);
@@ -37,9 +37,6 @@ export default function ParticipantDetail() {
 
     if (pRes.data) setParticipant(pRes.data);
     if (tRes.data) setTasks(tRes.data);
-    if (sRes.data) {
-      setCompletedTaskIds(new Set(sRes.data.map(s => s.task_id)));
-    }
     
     // Store submissions mapped by task_id for easy lookup
     const subsMap = new Map();
@@ -48,6 +45,13 @@ export default function ParticipantDetail() {
         subsMap.set(sub.task_id, sub);
       }
     });
+    
+    // Task is completed if it's in participant_task_status OR participant has a submission (leader/member)
+    const completed = new Set(sRes.data?.map(s => s.task_id) || []);
+    for (const [taskId] of subsMap.entries()) {
+      completed.add(taskId);
+    }
+    setCompletedTaskIds(completed);
     
     setSubmissionsMap(subsMap);
     
@@ -176,7 +180,7 @@ export default function ParticipantDetail() {
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
                         <div className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase rounded-full tracking-wider">SELESAI</div>
-                        {task.type === 'kelompok' && roleBadge}
+                        {task.task_type === 'Kelompok' && roleBadge}
                       </div>
                       <span className="material-symbols-outlined text-emerald-500" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
                     </div>
@@ -191,7 +195,7 @@ export default function ParticipantDetail() {
                         <span className="text-on-surface">{new Date(subDetails.uploaded_at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</span>
                       </div>
                       
-                      {task.type === 'kelompok' && (
+                      {task.task_type === 'Kelompok' && (
                         <div className="flex flex-col gap-1 text-sm bg-surface-container/30 p-2 rounded-lg">
                            <span className="text-on-surface-variant text-[11px] font-medium uppercase tracking-wider">Tim Pengumpul</span>
                            <span className="text-on-surface font-medium text-xs">
