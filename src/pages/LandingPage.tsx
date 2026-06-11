@@ -9,6 +9,8 @@ export default function LandingPage() {
   const [selectedClass, setSelectedClass] = useState('');
   
   const [participants, setParticipants] = useState<any[]>([]);
+  const [activeTasks, setActiveTasks] = useState<any[]>([]);
+  const [expandedParticipants, setExpandedParticipants] = useState<Record<string, boolean>>({});
   const [tasksCount, setTasksCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
@@ -48,9 +50,14 @@ export default function LandingPage() {
   const fetchDashboardData = async (actId: string, clsId: string) => {
     setLoading(true);
     try {
-      const { data: tData } = await supabase.from('tasks').select('id').eq('activity_id', actId).eq('is_active', true);
+      const { data: tData } = await supabase.from('tasks')
+        .select('id, title, task_type')
+        .eq('activity_id', actId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: true });
       const tCount = tData?.length || 0;
       setTasksCount(tCount);
+      setActiveTasks(tData || []);
 
       let pQuery = supabase.from('participants').select('*, classes(name), cities(name)');
       if (clsId) {
@@ -119,7 +126,8 @@ export default function LandingPage() {
             ...p,
             finished,
             progress: tCount > 0 ? Math.min(100, Math.round((finished / tCount) * 100)) : 0,
-            completionTime: latestTime[p.id] || Infinity
+            completionTime: latestTime[p.id] || Infinity,
+            completedTaskIds: counts[p.id] ? Array.from(counts[p.id]) : []
           };
         });
         
@@ -230,39 +238,149 @@ export default function LandingPage() {
                     <th className="px-lg py-md font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Kelas</th>
                     <th className="px-lg py-md font-label-md text-label-md text-on-surface-variant uppercase tracking-wider text-center">Tugas Selesai</th>
                     <th className="px-lg py-md font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Progress</th>
+                    <th className="px-lg py-md font-label-md text-label-md text-on-surface-variant uppercase tracking-wider text-center">Status Detail</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant">
                   {loading ? (
-                    <tr><td colSpan={4} className="px-lg py-8 text-center text-slate-500">Loading data...</td></tr>
+                    <tr><td colSpan={5} className="px-lg py-8 text-center text-slate-500">Loading data...</td></tr>
                   ) : participants.length === 0 ? (
-                    <tr><td colSpan={4} className="px-lg py-8 text-center text-slate-500">Belum ada peserta.</td></tr>
+                    <tr><td colSpan={5} className="px-lg py-8 text-center text-slate-500">Belum ada peserta.</td></tr>
                   ) : (
-                    participants.map(p => (
-                      <tr key={p.id} className="hover:bg-surface-container-low transition-colors">
-                        <td className="px-lg py-4">
-                          <div className="font-body-md text-body-md font-semibold text-on-surface">{p.name}</div>
-                          <div className="text-xs text-on-surface-variant mt-1">{p.cities?.name || '-'}</div>
-                        </td>
-                        <td className="px-lg py-4 font-body-md text-body-md">{p.classes?.name}</td>
-                        <td className="px-lg py-4 font-body-md text-body-md text-center">
-                          <span className="inline-block bg-primary/10 text-primary font-bold px-3 py-1 rounded-full text-sm">
-                            {p.finished} / {tasksCount}
-                          </span>
-                        </td>
-                        <td className="px-lg py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="flex-1 h-2.5 bg-surface-variant rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-primary transition-all duration-500" 
-                                style={{ width: `${p.progress}%` }}
-                              ></div>
-                            </div>
-                            <span className="font-label-md text-label-md text-on-surface w-10 text-right">{p.progress}%</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                    participants.map(p => {
+                      const isExpanded = !!expandedParticipants[p.id];
+                      return (
+                        <React.Fragment key={p.id}>
+                          <tr 
+                            onClick={() => {
+                              setExpandedParticipants(prev => ({
+                                ...prev,
+                                [p.id]: !prev[p.id]
+                              }));
+                            }}
+                            className="hover:bg-surface-container-low transition-colors cursor-pointer"
+                          >
+                            <td className="px-lg py-4">
+                              <div className="font-body-md text-body-md font-semibold text-on-surface">{p.name}</div>
+                              <div className="text-xs text-on-surface-variant mt-1">{p.cities?.name || '-'}</div>
+                              
+                              {/* Task status indicators */}
+                              {activeTasks.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mt-2" onClick={e => e.stopPropagation()}>
+                                  {activeTasks.map((t, index) => {
+                                    const isCompleted = p.completedTaskIds?.includes(t.id);
+                                    return (
+                                      <span 
+                                        key={t.id}
+                                        title={`${t.title}: ${isCompleted ? 'Sudah Upload' : 'Belum Upload'}`}
+                                        className={`inline-flex items-center justify-center w-5.5 h-5.5 rounded-full text-[10px] font-bold border transition-colors ${
+                                          isCompleted 
+                                            ? 'bg-emerald-500 border-emerald-600 text-white' 
+                                            : 'bg-slate-100 border-slate-300 text-slate-400'
+                                        }`}
+                                      >
+                                        {isCompleted ? '✓' : index + 1}
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-lg py-4 font-body-md text-body-md">{p.classes?.name}</td>
+                            <td className="px-lg py-4 font-body-md text-body-md text-center">
+                              <span className="inline-block bg-primary/10 text-primary font-bold px-3 py-1 rounded-full text-sm">
+                                {p.finished} / {tasksCount}
+                              </span>
+                            </td>
+                            <td className="px-lg py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="flex-1 h-2.5 bg-surface-variant rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-primary transition-all duration-500" 
+                                    style={{ width: `${p.progress}%` }}
+                                  ></div>
+                                </div>
+                                <span className="font-label-md text-label-md text-on-surface w-10 text-right">{p.progress}%</span>
+                              </div>
+                            </td>
+                            <td className="px-lg py-4 text-center">
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedParticipants(prev => ({
+                                    ...prev,
+                                    [p.id]: !prev[p.id]
+                                  }));
+                                }}
+                                className="text-primary hover:text-primary-hover hover:underline inline-flex items-center gap-1 font-semibold text-sm transition-colors"
+                              >
+                                <span>{isExpanded ? 'Tutup' : 'Cek Tugas'}</span>
+                                <span className="material-symbols-outlined text-[16px]">
+                                  {isExpanded ? 'expand_less' : 'expand_more'}
+                                </span>
+                              </button>
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr className="bg-surface-container-lowest/50">
+                              <td colSpan={5} className="px-lg py-2 border-b border-outline-variant">
+                                <div className="py-4 px-6 bg-surface-container-lowest rounded-xl border border-outline-variant/60 my-2 space-y-3 shadow-xs">
+                                  <div className="text-sm font-semibold text-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                                    <span className="flex items-center gap-2">
+                                      <span className="material-symbols-outlined text-[18px] text-primary">assessment</span>
+                                      Detail Status Tugas • {p.name}
+                                    </span>
+                                    <span className="text-xs font-normal text-slate-400">File & link disembunyikan demi privasi</span>
+                                  </div>
+                                  
+                                  {activeTasks.length === 0 ? (
+                                    <div className="text-xs text-slate-500 italic py-2">Tidak ada tugas aktif reguler untuk kegiatan ini.</div>
+                                  ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                      {activeTasks.map((t, idx) => {
+                                        const isCompleted = p.completedTaskIds?.includes(t.id);
+                                        return (
+                                          <div 
+                                            key={t.id} 
+                                            className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
+                                              isCompleted 
+                                                ? 'bg-emerald-50/40 border-emerald-100 text-emerald-900' 
+                                                : 'bg-slate-50/40 border-slate-100 text-slate-600'
+                                            }`}
+                                          >
+                                            <div className="space-y-0.5 pr-2">
+                                              <div className="font-semibold text-sm line-clamp-1 text-slate-800" title={t.title}>
+                                                {t.title}
+                                              </div>
+                                              <div className="text-[11px] text-slate-400 font-medium">
+                                                Tugas {idx + 1} • {t.task_type || 'Individu'}
+                                              </div>
+                                            </div>
+                                            <div className="flex-shrink-0">
+                                              {isCompleted ? (
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-bold whitespace-nowrap shadow-2xs">
+                                                  <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                                                  Sudah Upload
+                                                </span>
+                                              ) : (
+                                                <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-semibold whitespace-nowrap shadow-2xs">
+                                                  <span className="material-symbols-outlined text-[14px]">pending</span>
+                                                  Belum Upload
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
